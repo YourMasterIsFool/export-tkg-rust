@@ -152,14 +152,14 @@ pub async fn excel_worker_fn(csv_path: &str) -> Result<(), XlsxError> {
 
             workbook.save("output.xlsx")?;
 
-            match upload_worker("output.xlsx").await {
-                Ok(_) => {
-                    println!("success upload worker");
-                }
-                Err(err) => {
-                    println!("error when upload in s3 {}", err);
-                }
-            }
+            // match upload_worker("output.xlsx").await {
+            //     Ok(_) => {
+            //         println!("success upload worker");
+            //     }
+            //     Err(err) => {
+            //         println!("error when upload in s3 {}", err);
+            //     }
+            // }
 
             println!("Sukses! File output.xlsx dibuat.");
             Ok(())

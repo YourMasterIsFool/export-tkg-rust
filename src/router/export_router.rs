@@ -1,9 +1,9 @@
-use std::{alloc::System, sync::Arc, time::SystemTime};
+use std::sync::Arc;
 
-use axum::{Json, Router, extract::State, response::IntoResponse, routing::post};
+use axum::{Json, Router, extract::State, response::IntoResponse, routing::get, routing::post};
 use uuid::Uuid;
 
-use crate::types::{AppState, ExportJob, ExportRequest, JobQueue, ProcessStatus};
+use crate::types::{AppState, ExportJob, ExportRequest, Message, ProcessStatus};
 
 pub struct ExportRouter {
     state: Arc<AppState>,
@@ -35,10 +35,12 @@ impl ExportRouter {
         Router::new()
             .nest(
                 "/export",
-                Router::new().route(
-                    "/candidate_management",
-                    post(Self::export_candidate_management),
-                ),
+                Router::new()
+                    .route(
+                        "/candidate_management",
+                        post(Self::export_candidate_management),
+                    )
+                    .route("/list-status", get(Self::list_status)),
             )
             .with_state(self.state.clone())
     }
@@ -48,20 +50,25 @@ impl ExportRouter {
         Json(payload): Json<ExportRequest>,
     ) -> impl IntoResponse {
         let id = Uuid::new_v4();
-
         let job = ExportJob {
             id: Some(String::from(id)),
             client_email: payload.email,
             ..Default::default()
         };
-        {
-            let mut list = state.jobs.lock().unwrap();
-            list.push(job.clone());
-        }
+        let message = Message::Add(job.clone());
+        let tx = state.tx.clone();
 
-        // kirim ke worker
-        state.tx.send(job.clone()).await.unwrap();
+        tx.send(message).await.expect("cannot add job");
 
         Json(job).into_response()
+    }
+
+    pub async fn list_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+        let (tx_reply, rx_reply) = tokio::sync::oneshot::channel();
+
+        state.tx.send(Message::List(tx_reply)).await.unwrap();
+        let jobs = rx_reply.await.unwrap();
+
+        Json(jobs)
     }
 }

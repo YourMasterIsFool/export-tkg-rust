@@ -1,37 +1,68 @@
-use std::{collections::HashMap, fs, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
-use csv::{Error as CsvError, Writer};
 use sqlx::Error;
 
 use crate::{
-    types::{AppState, ExportJob},
+    types::{AppState, ExportJob, Message},
     utils::formatted_data::formatted_data,
     worker::{
-        csv_worker::save_csv_worker,
-        excel_worker::excel_worker_fn,
-        fetch::{FetchCandidate, FetchWorker},
+        csv_worker::save_csv_worker, excel_worker::excel_worker_fn, fetch::FetchWorker,
+        init_data_worker::InitDataWorker,
     },
 };
 
-use anyhow::{Ok as AyOke, Result as AnyResult};
+use anyhow::Result as AnyResult;
 
+#[derive(Clone)]
 pub struct Worker {
     state: Arc<AppState>,
+    fetch_worker: FetchWorker,
+    init_data_worker: InitDataWorker,
 }
 
 impl Worker {
     pub fn new(state: Arc<AppState>) -> Self {
-        Self { state }
+        Self {
+            state: state.clone(),
+            fetch_worker: FetchWorker::new(state.clone()),
+            init_data_worker: InitDataWorker::new(state.clone()),
+        }
     }
 
-    pub async fn init_worker(&self, job: &ExportJob) -> AnyResult<()> {
-        self.fetch_worker(job).await.unwrap();
-        excel_worker_fn(job.clone().id.unwrap().as_str());
+    pub async fn run_worker_init_data(&mut self) -> Result<(), sqlx::Error> {
+        match self.init_data_worker.run_worker().await {
+            Ok(_) => {
+                println!("susccess init data");
+            }
+
+            Err(err) => panic!("error init data {:?}", err),
+        }
+
+        // let last_vacancy_id = self.init_data_worker.get_last_id().await?;
+        // println!(" last vacancy id: {}", last_vacancy_id.unwrap_or(0));
         Ok(())
     }
+    pub async fn init_worker(&mut self, job: &ExportJob) -> AnyResult<()> {
+        match self.fetch_worker(job).await {
+            Ok(_) => {
+                println!("excel worker");
+                excel_worker_fn(job.clone().id.unwrap().as_str())
+                    .await
+                    .expect("error when handle excel worker");
+            }
+            Err(_) => {
+                println!("err");
+            }
+        };
 
+        Ok(())
+    }
+    pub async fn fetch_total_data_candidate(&self, job: &ExportJob) -> Result<i32, Error> {
+        let total = &self.fetch_worker.fetch_total_candidate(&job).await?;
+        Ok(*total)
+    }
     pub async fn fetch_worker(&self, job: &ExportJob) -> Result<(), Error> {
-        let fetch = FetchWorker::new(self.state.clone());
+        let fetch = &self.fetch_worker;
 
         let mut chunk = 0;
         let mut last_id: Option<u64> = Some(0);
@@ -86,11 +117,13 @@ impl Worker {
     }
 
     pub async fn update_chunk(&self, job_id: Option<String>, chunk: i32) {
-        let mut jobs_lock = self.state.jobs.lock().unwrap();
+        let update = Message::UpdateChunk {
+            id: job_id.unwrap_or("".to_string()),
+            chunk: chunk,
+        };
 
-        if let Some(job) = jobs_lock.iter_mut().find(|pre| pre.id == job_id) {
-            job.total_chunk = Some(chunk);
-            println!("update chunk");
-        }
+        let tx = &self.state.tx;
+
+        tx.send(update).await.expect("cannot update chunks")
     }
 }

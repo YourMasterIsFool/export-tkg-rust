@@ -1,9 +1,11 @@
-use std::{fs, path::Path};
+use std::fs;
 
+use crate::worker::upload_worker;
 use csv::{Reader, ReaderBuilder, StringRecord};
-use rust_xlsxwriter::{XlsxError, workbook::Workbook, worksheet::Worksheet};
+use rust_xlsxwriter::{XlsxError, workbook::Workbook};
+use upload_worker::upload_worker;
 
-pub fn excel_worker_fn(csv_path: &str) -> Result<(), XlsxError> {
+pub async fn excel_worker_fn(csv_path: &str) -> Result<(), XlsxError> {
     let read_folder = fs::read_dir(format!("csv/{}", csv_path));
 
     let headers = [
@@ -149,6 +151,15 @@ pub fn excel_worker_fn(csv_path: &str) -> Result<(), XlsxError> {
             }
 
             workbook.save("output.xlsx")?;
+
+            match upload_worker("output.xlsx").await {
+                Ok(_) => {
+                    println!("success upload worker");
+                }
+                Err(err) => {
+                    println!("error when upload in s3 {}", err);
+                }
+            }
 
             println!("Sukses! File output.xlsx dibuat.");
             Ok(())

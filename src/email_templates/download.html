@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type="text/css">
+      body,
+      table,
+      td,
+      a {
+        -webkit-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+      }
+      table,
+      td {
+        mso-table-lspace: 0pt;
+        mso-table-rspace: 0pt;
+      }
+      img {
+        border: 0;
+        height: auto;
+        line-height: 100%;
+        outline: none;
+        text-decoration: none;
+      }
+      .email-container {
+        max-width: 600px;
+        margin: auto;
+        background-color: #ffffff;
+        padding: 20px;
+        font-family: Arial, sans-serif;
+      }
+      .header {
+        background-color: #f8f9fa;
+        padding: 20px;
+        text-align: center;
+      }
+      .content {
+        padding: 30px 20px;
+        line-height: 1.5;
+      }
+      .footer {
+        background-color: #f8f9fa;
+        padding: 20px;
+        text-align: center;
+        font-size: 12px;
+        color: #666666;
+      }
+      .button {
+        display: inline-block;
+        padding: 12px 24px;
+        background-color: #007bff;
+        color: #ffffff !important;
+        text-decoration: none;
+        border-radius: 4px;
+        margin: 20px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="email-container">
+      <div class="header">
+        <img src="{{logo_url}}" alt="Company Logo" width="150" />
+      </div>
+      <div class="content">
+        <h1>{{subject}}</h1>
+        <p>{{body}}</p>
+        {% if download_url %}
+        <div
+          style="
+            background-color: #f8f9fa;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+          "
+        >
+          <p>📎 Your attachment is ready</p>
+          <a href="{{download_url}}" class="button">Download File</a>
+          <p><small>Link valid for 12 hours</small></p>
+        </div>
+        {% endif %}
+      </div>
+      <div class="footer">
+        <p>© 2024 Jobseeker Software. All rights reserved.</p>
+      </div>
+    </div>
+  </body>
+</html>

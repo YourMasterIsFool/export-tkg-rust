@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 axum = "0.8.7"
 csv = "1.4.0"
-
 sqlx = { version = "0.6", features = ["mysql", "runtime-tokio-rustls", "chrono"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
@@ -16,7 +15,11 @@ log="0.4"
 chrono = { version = "0.4", features = ["serde"]}
 serde_json = "1.0"
 rust_xlsxwriter = "0.92.2"
-
+dotenv = "0.15.0"
+aws-config = "1.8.11"
+aws-sdk-s3 = "1.115.0"
+#aws-config = "0.61.0"
+#aws-sdk-s3 = "0.61.0"
 
 
 [dependencies.uuid]

@@ -1,3 +1,9 @@
+
+GET http://localhost:5559/export/list-status HTTP/1.1
+
+
+###
+
 POST http://localhost:5559/export/candidate_management HTTP/1.1
 content-type: application/json
 
@@ -6,3 +12,6 @@ content-type: application/json
     "is_candidate_management": true,
     "email": "tkg.dev@yopmail.com"
 }
+
+
+

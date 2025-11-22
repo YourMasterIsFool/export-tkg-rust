@@ -1,35 +1,23 @@
-# ===========================
-# 1) BUILD STAGE
-# ===========================
-FROM rust:1.82 AS builder
-
+# Stage 1: Builder
+FROM rust:latest AS builder
 WORKDIR /app
 
+# Copy Cargo files first for caching deps
 COPY Cargo.toml Cargo.lock ./
-
 RUN mkdir src && echo "fn main() {}" > src/main.rs
 RUN cargo build --release
-RUN rm -rf src
 
+# Copy source code dan build release binary
 COPY . .
-
 RUN cargo build --release
+RUN rm -rf src  # optional, bersihkan dummy src
 
-
-# ===========================
-FROM debian:bookworm-slim AS runtime
-
-
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-
+# Stage 2: Minimal runtime
+FROM debian:bookworm-slim
 WORKDIR /app
 
-# Copy binary dari builder
-COPY --from=builder /app/target/release/export_rust /app/app
+COPY --from=builder /app/target/release/export_rust /usr/local/bin/export_rust
 
-# Expose port Axum
-EXPOSE 3000
+EXPOSE 5559
 
-# Jalankan
-CMD ["/app/app"]
+CMD ["export_rust"]

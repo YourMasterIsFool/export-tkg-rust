@@ -1,30 +1,11 @@
-use std::{sync::Arc, time::SystemTime};
+use std::sync::Arc;
 
-use sqlx::{Error, MySql, Pool, prelude::FromRow};
+use sqlx::Error;
 
 use crate::types::{AppState, ExportJob, RowData};
 // use xlsxwriter::worksheet::filter;
 
-pub struct FetchCandidate {
-    pub is_candidate_management_pool: bool,
-    pub vacancy_id: Option<i64>,
-    pub start_date: Option<SystemTime>,
-    pub end_date: Option<SystemTime>,
-    pub employer_id: i64,
-}
-
-impl Default for FetchCandidate {
-    fn default() -> Self {
-        Self {
-            is_candidate_management_pool: false,
-            vacancy_id: None,
-            start_date: None,
-            end_date: None,
-            employer_id: 63402,
-        }
-    }
-}
-
+#[derive(Clone)]
 pub struct FetchWorker {
     state: Arc<AppState>,
 }
@@ -34,10 +15,7 @@ impl FetchWorker {
         Self { state }
     }
 
-    pub async fn fetch_total_candidate(
-        &self,
-        candidate_option: &FetchCandidate,
-    ) -> Result<i64, Error> {
+    pub async fn fetch_total_candidate(&self, candidate_option: &ExportJob) -> Result<i32, Error> {
         let mut filters: Vec<String> = Vec::new();
 
         filters.push(format!("employer_id = {} ", &candidate_option.employer_id));

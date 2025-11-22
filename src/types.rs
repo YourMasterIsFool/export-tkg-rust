@@ -7,7 +7,7 @@ use std::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{MySql, Pool, prelude::FromRow};
-use tokio::sync::mpsc::Sender;
+use tokio::sync::{mpsc::Sender, oneshot};
 
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct ExportRequest {
@@ -50,8 +50,7 @@ pub struct JobQueue {
 #[derive(Clone)]
 pub struct AppState {
     pub db: Pool<MySql>,
-    pub tx: Sender<ExportJob>,
-    pub jobs: Arc<Mutex<Vec<ExportJob>>>,
+    pub tx: Sender<Message>,
 }
 
 #[derive(Debug, FromRow, Serialize)]
@@ -92,4 +91,13 @@ impl RowData {
 
         Ok(map)
     }
+}
+
+#[derive(Debug)]
+pub enum Message {
+    Add(super::ExportJob),
+    UpdateSuccess { id: String },
+    UpdateChunk { id: String, chunk: i32 },
+    InitChunk { id: String, total_chunk: i32 },
+    List(oneshot::Sender<Vec<super::ExportJob>>),
 }

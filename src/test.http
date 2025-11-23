@@ -8,10 +8,12 @@ POST http://localhost:5559/export/candidate_management HTTP/1.1
 content-type: application/json
 
 {
-    "vacancy_id": 123132,
+    "vacancy_id": null,
     "is_candidate_management": true,
     "email": "tkg.dev@yopmail.com"
 }
+
+
 
 
 

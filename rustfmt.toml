@@ -1,0 +1,6 @@
+#use space instead of tabs
+hard_tabse=false
+
+
+#set consistent line widh
+max_width=120

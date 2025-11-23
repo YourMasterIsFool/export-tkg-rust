@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use rust_xlsxwriter::XlsxError;
 use sqlx::Error;
 
 use crate::{
@@ -42,13 +43,11 @@ impl Worker {
         // println!(" last vacancy id: {}", last_vacancy_id.unwrap_or(0));
         Ok(())
     }
-    pub async fn init_worker(&mut self, job: &ExportJob) -> AnyResult<()> {
+    pub async fn init_worker(&mut self, job: &ExportJob) -> Result<(), XlsxError> {
         match self.fetch_worker(job).await {
             Ok(_) => {
                 println!("excel worker");
-                excel_worker_fn(job.clone().id.unwrap().as_str())
-                    .await
-                    .expect("error when handle excel worker");
+                excel_worker_fn(job.clone().id.unwrap().as_str()).await?;
             }
             Err(_) => {
                 println!("err");
@@ -87,7 +86,7 @@ impl Worker {
                             .map(|f| formatted_data(f.to_hashmap().unwrap())) // Flatten semua HashMap menjadi key-value pairs
                             .collect::<Vec<HashMap<String, String>>>();
 
-                        println!("format data {:?}", format_data);
+                        println!("format data {}", chunk);
 
                         match save_csv_worker(
                             &job.id.clone().unwrap().as_str(),

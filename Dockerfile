@@ -1,23 +1,16 @@
-# Stage 1: Builder
+# Stage 1: Build
 FROM rust:latest AS builder
 WORKDIR /app
-
-# Copy Cargo files first for caching deps
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release
-
-# Copy source code dan build release binary
 COPY . .
 RUN cargo build --release
-RUN rm -rf src  # optional, bersihkan dummy src
 
-# Stage 2: Minimal runtime
-FROM debian:bookworm-slim
-WORKDIR /app
+# Stage 2: Runtime — gunakan image dengan GLIBC yang cocok
+FROM ubuntu:24.04
 
-COPY --from=builder /app/target/release/export_rust /usr/local/bin/export_rust
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-EXPOSE 5559
+COPY --from=builder /app/target/release/export_rust /usr/local/bin/
 
-CMD ["export_rust"]
+CMD ["/usr/local/bin/export_rust"]

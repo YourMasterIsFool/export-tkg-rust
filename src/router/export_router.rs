@@ -53,6 +53,7 @@ impl ExportRouter {
         let job = ExportJob {
             id: Some(String::from(id)),
             client_email: payload.email,
+            vacancy_id: payload.vacancy_id,
             ..Default::default()
         };
         let message = Message::Add(job.clone());

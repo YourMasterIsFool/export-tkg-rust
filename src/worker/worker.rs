@@ -71,6 +71,16 @@ impl Worker {
             println!("last_id: {:?}", last_id);
             if let Some(records) = fetch_data {
                 if records.is_empty() {
+                    match save_csv_worker(job.id.clone().unwrap().as_str(), &format!("{}", chunk), &None) {
+                        Ok(_) => {
+                            println!("successfully created file csv");
+
+                            self.update_chunk(job.id.clone(), chunk).await;
+                        }
+                        Err(err) => {
+                            panic!("{}", err);
+                        }
+                    }
                     break;
                 }
 
@@ -83,7 +93,11 @@ impl Worker {
                             .iter()
                             .map(|f| formatted_data(f.to_hashmap().unwrap())) // Flatten semua HashMap menjadi key-value pairs
                             .collect::<Vec<HashMap<String, String>>>();
-                        match save_csv_worker(job.id.clone().unwrap().as_str(), &format!("{}", chunk), format_data) {
+                        match save_csv_worker(
+                            job.id.clone().unwrap().as_str(),
+                            &format!("{}", chunk),
+                            &Some(format_data.to_vec()),
+                        ) {
                             Ok(_) => {
                                 println!("successfully created file csv");
 

@@ -8,12 +8,13 @@ use std::{env, sync::Arc};
 
 use axum::routing::get;
 use axum::{Json, Router, response::IntoResponse};
+use chrono::Utc;
 use tokio::sync::Semaphore;
 use urlencoding::encode;
 
 use crate::types::EmailTemplate;
 use crate::worker::email_worker::EmailWorker;
-use crate::worker::upload_worker::{self, upload_worker};
+use crate::worker::upload_worker::upload_worker;
 use crate::{
     core::database::database_core,
     router::export_router::ExportRouter,
@@ -32,13 +33,13 @@ async fn main() {
     let db_name = env::var("DATABASE_NAME").unwrap();
     let db_host = env::var("DATABASE_HOST").unwrap();
     let db_port = env::var("DATABASE_PORT").unwrap();
+    let port = env::var("PORT").unwrap();
+    let host = env::var("HOST").unwrap();
 
     let database_url = format!(
         "mysql://{}:{}@{}:{}/{}",
         db_username, db_password, db_host, db_port, db_name
     );
-
-    println!("URL DEBUG = {:?}", database_url);
 
     // init database
     let database = database_core(&database_url).await.unwrap();
@@ -169,6 +170,11 @@ async fn main() {
 
                 // get list reply
                 Message::List(reply) => {
+                    let threshold = Utc::now();
+
+                    // update jobs
+                    let _ = jobs.iter_mut().filter(|pre| pre.expired_at.unwrap() <= threshold);
+
                     let _ = reply.send(jobs.clone());
                 }
             }
@@ -181,7 +187,11 @@ async fn main() {
         .merge(export_router.build_router())
         .route("/healthz", get(router_healthz));
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:5559").await.unwrap();
+    let listener = tokio::net::TcpListener::bind(format!("{}:{}", host, port))
+        .await
+        .unwrap();
+
+    println!("server running http://{}:{}", host, port);
     axum::serve(listener, app).await.unwrap();
 }
 

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use axum::{Json, Router, extract::State, response::IntoResponse, routing::get, routing::post};
+use chrono::{Duration, Utc};
 use uuid::Uuid;
 
 use crate::types::{AppState, ExportJob, ExportRequest, Message, ProcessStatus};
@@ -24,6 +25,7 @@ impl Default for ExportJob {
             vacancy_id: Some(333438),
             start_date: None,
             total: 0,
+            expired_at: None,
         }
     }
 }
@@ -54,12 +56,17 @@ impl ExportRouter {
             client_email: payload.email,
             is_candidate_pool: false,
             vacancy_id: payload.vacancy_id,
+            expired_at: Some(Utc::now() + Duration::days(2)),
+
             ..Default::default()
         };
         let message = Message::Add(job.clone());
         let tx = state.tx.clone();
 
-        tx.send(message).await.expect("error send job");
+        tx.send(message)
+            .await
+            .map_err(|err| println!("failed send job: {}", err))
+            .unwrap();
 
         Json(job).into_response()
     }
@@ -75,6 +82,7 @@ impl ExportRouter {
             is_candidate_pool: true,
             start_date: payload.start_date,
             end_date: payload.end_date,
+            expired_at: Some(Utc::now() + Duration::days(2)),
             ..Default::default()
         };
         let message = Message::Add(job.clone());

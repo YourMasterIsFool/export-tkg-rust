@@ -33,6 +33,7 @@ pub struct ExportJob {
     pub is_candidate_pool: bool,
     pub employer_id: i64,
     pub total: i32,
+    pub expired_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Clone)]

@@ -10,8 +10,8 @@ pub async fn upload_worker(ouput_file: &str) -> Result<String, aws_sdk_s3::Error
     let s3 = s3_config().await.expect("cannot upload in in s3");
 
     // let bucket = "s3-bucket.api-jobseeker.site";
-    let region = env::var("AWS_REGION").unwrap();
-    let bucket = env::var("AWS_BUCKET_NAME").unwrap();
+    let region = env::var("AWS_REGION").expect("env region not found");
+    let bucket = env::var("AWS_BUCKET_NAME").expect("env bucket not found");
     let id = Uuid::new_v4();
     let file_path = format!("tkg-export/{}-{}.xlsx", ouput_file, id);
 

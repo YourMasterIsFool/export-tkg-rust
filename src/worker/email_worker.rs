@@ -83,6 +83,7 @@ impl EmailWorker {
                     .header(ContentType::TEXT_HTML)
                     .body(Body::new(template)),
             )
+            .map_err(|err| println!("failed format email"))
             .unwrap();
 
         let mailer = SmtpTransport::relay("smtpdm-ap-southeast-1.aliyun.com")

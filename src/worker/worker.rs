@@ -12,8 +12,6 @@ use crate::{
     },
 };
 
-use anyhow::Result as AnyResult;
-
 #[derive(Clone)]
 pub struct Worker {
     state: Arc<AppState>,
@@ -57,7 +55,7 @@ impl Worker {
         Ok(())
     }
     pub async fn fetch_total_data_candidate(&self, job: &ExportJob) -> Result<i32, Error> {
-        let total = &self.fetch_worker.fetch_total_candidate(&job).await?;
+        let total = &self.fetch_worker.fetch_total_candidate(job).await?;
         Ok(*total)
     }
     pub async fn fetch_worker(&self, job: &ExportJob) -> Result<(), Error> {
@@ -68,7 +66,7 @@ impl Worker {
 
         println!("running worker fetch");
         loop {
-            let fetch_data = fetch.fetch_candidate_data(last_id, &job).await?;
+            let fetch_data = fetch.run_candidate_fetch(&last_id, job).await?;
             println!("fetch data");
             println!("last_id: {:?}", last_id);
             if let Some(records) = fetch_data {
@@ -85,14 +83,7 @@ impl Worker {
                             .iter()
                             .map(|f| formatted_data(f.to_hashmap().unwrap())) // Flatten semua HashMap menjadi key-value pairs
                             .collect::<Vec<HashMap<String, String>>>();
-
-                        println!("format data {}", chunk);
-
-                        match save_csv_worker(
-                            &job.id.clone().unwrap().as_str(),
-                            &format!("{}", chunk),
-                            format_data,
-                        ) {
+                        match save_csv_worker(job.id.clone().unwrap().as_str(), &format!("{}", chunk), format_data) {
                             Ok(_) => {
                                 println!("successfully created file csv");
 
@@ -118,7 +109,7 @@ impl Worker {
     pub async fn update_chunk(&self, job_id: Option<String>, chunk: i32) {
         let update = Message::UpdateChunk {
             id: job_id.unwrap_or("".to_string()),
-            chunk: chunk,
+            chunk,
         };
 
         let tx = &self.state.tx;

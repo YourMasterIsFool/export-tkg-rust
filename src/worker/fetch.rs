@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use chrono::{DateTime, Utc};
 use sqlx::Error;
 
 use crate::types::{AppState, ExportJob, RowData};
@@ -24,19 +25,83 @@ impl FetchWorker {
             filters.push(format!("vacancy_id = {}", vacancy_id));
         }
 
-        let query =
-            String::from("SELECT COUNT(DISTINCT vacancy_can_id) from _temp_taekwang_export");
+        let query = String::from("SELECT COUNT(DISTINCT vacancy_can_id) from _temp_taekwang_export");
         let query_sql = format!("{} where {}", query, filters.join(" AND "));
 
-        let count = sqlx::query_scalar(&query_sql)
-            .fetch_one(&self.state.db.clone())
-            .await?;
+        let count = sqlx::query_scalar(&query_sql).fetch_one(&self.state.db.clone()).await?;
         Ok(count)
     }
 
-    pub async fn fetch_candidate_data(
+    pub async fn fetch_candidate_pool(
         &self,
-        cursor_id: Option<u64>,
+        cursor: &Option<u64>,
+        export: &ExportJob,
+    ) -> Result<Option<Vec<RowData>>, sqlx::Error> {
+        let mut filters = Vec::<String>::new();
+
+        filters.push(String::from(format!("tte.employer_id = {}", export.employer_id)));
+
+        if let (Some(start_date), Some(end_date)) = (export.start_date, export.end_date) {
+            // let format_start_date: DateTime<Utc> = start_date.into();
+            // let format_end_date: DateTime<Utc> = end_date.into();
+            let string_query = format!(
+                "tte.applied_date between {} and {}",
+                start_date.format("%Y-%m-%d").to_string(),
+                end_date.format("%Y-%m-%d").to_string()
+            );
+            filters.push(string_query);
+        }
+
+        if let Some(last_id) = cursor {
+            filters.push(format!("tte.vacancy_can_id > {}", last_id));
+        }
+
+        if let Some(vacancy_id) = export.vacancy_id {
+            filters.push(format!("tte.vacancy_id = {}", vacancy_id));
+        }
+
+        let query_select_max_join = "JOIN(SELECT candidate_id, max(id) as max_id from _temp_taekwang_export GROUP BY candidate_id)latest on latest.max_id = tte.id and latest.candidate_id = tte.candidate_id";
+
+        let mut where_builder = String::new();
+
+        if filters.len() > 0 {
+            where_builder = format!("WHERE {}", filters.join(" AND "));
+        }
+
+        let query_sql = format!(
+            "
+             select
+            distinct tte.candidate_id as candidate_id,
+            tte.candidate as full_name,
+            tte.email as email,
+            tte.phone as phone,
+            tte.id_number as id_number,
+            tte.whatsapp as wa_number,
+            tte.license_info as license_info,
+            tte.expected_salary as expected_salary,
+            tte.latest_vacancy as latest_vacancy,
+            tte.education_history as education_history,
+            tte.work_experience as work_experience,
+            tte.language_skills as language_skills,
+            tte.certifications as certifications,
+            tte.id as id
+            from _temp_taekwang_export tte
+            {}
+            {}
+            order by tte.id asc
+            LIMIT 2000
+            ",
+            query_select_max_join, where_builder
+        );
+
+        let records = sqlx::query_as::<_, RowData>(&query_sql)
+            .fetch_all(&self.state.db)
+            .await?;
+        Ok(Some(records))
+    }
+    pub async fn candidate_management(
+        &self,
+        cursor_id: &Option<u64>,
         candidate_option: &ExportJob,
     ) -> Result<Option<Vec<RowData>>, Error> {
         let mut filters: Vec<String> = Vec::new();
@@ -90,5 +155,21 @@ impl FetchWorker {
             .await?;
 
         Ok(Some(records))
+    }
+
+    pub async fn run_candidate_fetch(
+        &self,
+        last_vacancy_id: &Option<u64>,
+        export: &ExportJob,
+    ) -> Result<Option<Vec<RowData>>, sqlx::Error> {
+        let mut records: Option<Vec<RowData>> = None;
+
+        if export.is_candidate_pool {
+            records = self.fetch_candidate_pool(last_vacancy_id, export).await?;
+        } else {
+            records = self.candidate_management(last_vacancy_id, export).await?;
+        }
+
+        Ok(records)
     }
 }

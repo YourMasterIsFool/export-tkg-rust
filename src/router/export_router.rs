@@ -15,7 +15,7 @@ impl Default for ExportJob {
             client_email: String::from("tkg.dev@yopmail.com"),
             final_output: None,
             id: None,
-            status: ProcessStatus::PROCESS,
+            status: ProcessStatus::Process,
             total_chunk: Some(0),
             current_chunk: Some(0),
             is_candidate_pool: false,
@@ -23,6 +23,7 @@ impl Default for ExportJob {
             end_date: None,
             vacancy_id: Some(333438),
             start_date: None,
+            total: 0,
         }
     }
 }
@@ -36,11 +37,9 @@ impl ExportRouter {
             .nest(
                 "/export",
                 Router::new()
-                    .route(
-                        "/candidate_management",
-                        post(Self::export_candidate_management),
-                    )
-                    .route("/list-status", get(Self::list_status)),
+                    .route("/candidate-management", post(Self::export_candidate_management))
+                    .route("/candidate-pool", post(Self::export_candidate_pool))
+                    .route("/status", get(Self::list_status)),
             )
             .with_state(self.state.clone())
     }
@@ -53,7 +52,29 @@ impl ExportRouter {
         let job = ExportJob {
             id: Some(String::from(id)),
             client_email: payload.email,
+            is_candidate_pool: false,
             vacancy_id: payload.vacancy_id,
+            ..Default::default()
+        };
+        let message = Message::Add(job.clone());
+        let tx = state.tx.clone();
+
+        tx.send(message).await.expect("error send job");
+
+        Json(job).into_response()
+    }
+
+    pub async fn export_candidate_pool(
+        State(state): State<Arc<AppState>>,
+        Json(payload): Json<ExportRequest>,
+    ) -> impl IntoResponse {
+        let id = Uuid::new_v4();
+        let job = ExportJob {
+            id: Some(String::from(id)),
+            client_email: payload.email,
+            is_candidate_pool: true,
+            start_date: payload.start_date,
+            end_date: payload.end_date,
             ..Default::default()
         };
         let message = Message::Add(job.clone());

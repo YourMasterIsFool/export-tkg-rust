@@ -1,12 +1,11 @@
 use std::fs;
 
-use crate::worker::upload_worker;
-use csv::{Reader, ReaderBuilder, StringRecord};
+use csv::Reader;
 use rust_xlsxwriter::{XlsxError, workbook::Workbook};
 // use upload_worker::upload_worker;
 
 pub async fn excel_worker_fn(csv_path: &str) -> Result<(), XlsxError> {
-    let read_folder = fs::read_dir(format!("csv/{}", csv_path));
+    let read_folder = fs::read_dir(format!("csv/{}", csv_path)).map_err(|err| println!("failed read file {}", err));
 
     let headers = [
         "Candidate ID",
@@ -123,49 +122,101 @@ pub async fn excel_worker_fn(csv_path: &str) -> Result<(), XlsxError> {
         "Certification 4 - Expired Date",
     ];
 
-    match read_folder {
-        Ok(entries) => {
-            let mut workbook = Workbook::new();
-            let mut sheet = workbook.add_worksheet().set_name("results")?;
+    if read_folder.is_ok() {
+        let mut workbook = Workbook::new();
+        // workbook.add_worksheet_with_low_memory();
+        // workbook.add_worksheet_with_constant_memory();
+        let sheet = workbook.add_worksheet_with_constant_memory().set_name("results")?;
 
-            for (index, header) in headers.iter().enumerate() {
-                sheet.write_string(0, index as u16, header.to_string());
-            }
-            for entry in entries.flatten() {
-                let path = entry.path();
+        for (index, header) in headers.iter().enumerate() {
+            sheet
+                .write_string(0, index as u16, header.to_string())
+                .map_err(|err| println!("error set headers {}", err));
+        }
+        let mut row_index = 1u32;
 
-                if (path.is_file()) {
-                    let file = path.extension().unwrap();
-                    if (file == "csv") {
-                        let mut reader_csv = Reader::from_path(path.display().to_string()).unwrap();
+        for entry in read_folder.unwrap().flatten() {
+            let path = entry.path();
+            if path.is_file() && path.extension().map(|ext| ext == "csv").unwrap_or(false) {
+                let mut reader_csv = Reader::from_path(&path).unwrap();
 
-                        for (index, data) in reader_csv.records().enumerate() {
-                            println!("{} {:?} /n", index, data);
+                for record in reader_csv.records() {
+                    let record = record.unwrap();
 
-                            for (col, data) in data.iter().enumerate() {
-                                sheet.write_row((index + 1) as u32, col as u16, data)?;
-                            }
-                        }
+                    for (col_index, value) in record.iter().enumerate() {
+                        sheet.write_string(row_index, col_index as u16, value)?;
+                    }
+
+                    row_index += 1;
+
+                    // opsional: print progress
+                    if row_index % 1000 == 0 {
+                        println!("Written {} rows...", row_index);
                     }
                 }
             }
-
-            workbook.save("output.xlsx")?;
-
-            // match upload_worker("output.xlsx").await {
-            //     Ok(_) => {
-            //         println!("success upload worker");
-            //     }
-            //     Err(err) => {
-            //         println!("error when upload in s3 {}", err);
-            //     }
-            // }
-
-            println!("Sukses! File output.xlsx dibuat.");
-            Ok(())
         }
-        Err(err) => {
-            panic!("folder not found {} {}", csv_path, err);
-        }
+
+        workbook.save("output.xlsx")?;
+
+        // match upload_worker("output.xlsx").await {
+        //     Ok(_) => {
+        //         println!("success upload worker");
+        //     }
+        //     Err(err) => {
+        //         println!("error when upload in s3 {}", err);
+        //     }
+        // }
+
+        println!("Sukses! File output.xlsx dibuat.");
     }
+    Ok(())
+    // match read_folder {
+    //     Ok(entries) => {
+    //         let mut workbook = Workbook::new();
+    //         workbook.add_worksheet_with_low_memory();
+    //         workbook.add_worksheet_with_constant_memory();
+    //         let sheet = workbook.add_worksheet().set_name("results")?;
+
+    //         for (index, header) in headers.iter().enumerate() {
+    //             sheet
+    //                 .write_string(0, index as u16, header.to_string())
+    //                 .map_err(|err| println!("error set headers {}", err));
+    //         }
+    //         for entry in entries.flatten() {
+    //             let path = entry.path();
+
+    //             if path.is_file() {
+    //                 let file = path.extension().unwrap();
+    //                 if file == "csv" {
+    //                     let mut reader_csv = Reader::from_path(path.display().to_string()).unwrap();
+
+    //                     for (index, data) in reader_csv.records().enumerate() {
+    //                         println!("{} {:?} /n", index, data);
+
+    //                         for (col, data) in data.iter().enumerate() {
+    //                             sheet.write_row((index + 1) as u32, col as u16, data)?;
+    //                         }
+    //                     }
+    //                 }
+    //             }
+    //         }
+
+    //         workbook.save("output.xlsx")?;
+
+    //         // match upload_worker("output.xlsx").await {
+    //         //     Ok(_) => {
+    //         //         println!("success upload worker");
+    //         //     }
+    //         //     Err(err) => {
+    //         //         println!("error when upload in s3 {}", err);
+    //         //     }
+    //         // }
+
+    //         println!("Sukses! File output.xlsx dibuat.");
+    //         Ok(())
+    //     }
+    //     Err(err) => {
+    //         println!("failed read data {}", err);
+    //     }
 }

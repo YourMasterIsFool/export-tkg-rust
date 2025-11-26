@@ -1,8 +1,4 @@
-use std::{
-    collections::{HashMap, VecDeque},
-    sync::{Arc, Mutex, mpsc},
-    time::SystemTime,
-};
+use std::{collections::HashMap, time::SystemTime};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -12,16 +8,15 @@ use tokio::sync::{mpsc::Sender, oneshot};
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct ExportRequest {
     pub vacancy_id: Option<i64>,
-    pub start_date: Option<SystemTime>,
-    pub end_date: Option<SystemTime>,
-    pub is_candidate_management: bool,
+    pub start_date: Option<DateTime<Utc>>,
+    pub end_date: Option<DateTime<Utc>>,
     pub email: String,
 }
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub enum ProcessStatus {
-    SUCCESS,
-    FAILED,
-    PROCESS,
+    Success,
+    Failed,
+    Process,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,24 +24,17 @@ pub struct ExportJob {
     pub id: Option<String>,
     pub status: ProcessStatus,
     pub total_chunk: Option<i32>,
-    pub start_date: Option<SystemTime>,
-    pub end_date: Option<SystemTime>,
+    pub start_date: Option<DateTime<Utc>>,
+    pub end_date: Option<DateTime<Utc>>,
     pub vacancy_id: Option<i64>,
     pub final_output: Option<String>,
     pub client_email: String,
     pub current_chunk: Option<i32>,
     pub is_candidate_pool: bool,
     pub employer_id: i64,
+    pub total: i32,
 }
 
-#[derive(Debug)]
-pub struct JobQueue {
-    pub id: String,
-    pub status: ProcessStatus,
-    pub total_chunk: Option<i32>,
-    pub final_output: Option<String>,
-    pub client_email: String,
-}
 #[derive(Clone)]
 pub struct AppState {
     pub db: Pool<MySql>,
@@ -98,6 +86,43 @@ pub enum Message {
     Add(super::ExportJob),
     UpdateSuccess { id: String },
     UpdateChunk { id: String, chunk: i32 },
-    InitChunk { id: String, total_chunk: i32 },
+    InitChunk { id: String, total_chunk: i32, total: i32 },
     List(oneshot::Sender<Vec<super::ExportJob>>),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EmailTemplate {
+    pub logo_url: String,
+    pub subject: String,
+    pub body: String,
+    pub donwload_url: Option<String>,
+    pub client_email: String,
+}
+
+//  return {
+
+//       "status": "ok",
+//       "message": "Application is healthy",
+//       "timestamp": now.isoformat(),
+//       "date": now.strftime("%Y-%m-%d %H:%M:%S")
+
+//     }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Healthz {
+    pub status: String,
+    pub message: String,
+    pub timestamp: DateTime<Utc>,
+    pub date: String,
+}
+
+impl Default for Healthz {
+    fn default() -> Self {
+        Self {
+            status: "Ok".to_string(),
+            message: "Application is healthy".to_string(),
+            timestamp: Utc::now(),
+            date: Utc::now().format("%Y-%m-%d").to_string(),
+        }
+    }
 }

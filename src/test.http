@@ -1,17 +1,35 @@
 
-GET http://localhost:5559/export/list-status HTTP/1.1
+
+###
+GET http://localhost:5559/export/status HTTP/1.1
 
 
 ###
+POST http://localhost:5559/export/candidate-management HTTP/1.1
+content-type: application/json
 
-POST http://localhost:5559/export/candidate_management HTTP/1.1
+{
+    "vacancy_id": 333438,
+    "email": "tkg.dev@yopmail.com"
+
+}
+
+###
+POST http://localhost:5559/export/candidate-pool HTTP/1.1
 content-type: application/json
 
 {
     "vacancy_id": null,
-    "is_candidate_management": true,
-    "email": "tkg.dev@yopmail.com"
+    "email": "tkg.dev@yopmail.com",
+    "start_date": "2025-11-10T04:10:57.275Z",
+    "end_date": "2025-11-24T04:10:57.275Z"
 }
+
+
+
+###
+GET http://localhost:5559/healthz HTTP/1.1
+
 
 
 

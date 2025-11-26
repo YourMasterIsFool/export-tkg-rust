@@ -1,19 +1,15 @@
 use std::{collections::HashMap, fs};
 
-use csv::{Error, Writer};
+use csv::Writer;
 
-pub fn save_csv_worker(
-    path: &str,
-    filename: &str,
-    records: &Vec<HashMap<String, String>>,
-) -> csv::Result<()> {
+pub fn save_csv_worker(path: &str, filename: &str, records: &Vec<HashMap<String, String>>) -> csv::Result<()> {
     let csv_dir = format!("csv/{}", &path);
     fs::create_dir_all(&csv_dir)?;
 
     let mut writer = Writer::from_path(format!("{}/{}.csv", csv_dir, filename))?;
     //create path folder
 
-    if let Some(first) = records.first() {
+    if let Some(_first) = records.first() {
         let headers = [
             "Candidate ID",
             "Candidate",
@@ -128,16 +124,12 @@ pub fn save_csv_worker(
             "Certification 4 - Acquire Date",
             "Certification 4 - Expired Date",
         ];
-        writer.write_record(&headers)?; // ✅ Added & for write_record
+        writer.write_record(headers)?; // ✅ Added & for write_record
 
         for row in records {
             let record: Vec<String> = headers
                 .iter()
-                .map(|field| {
-                    row.get(&field.to_string())
-                        .cloned()
-                        .unwrap_or_else(|| "".to_string())
-                })
+                .map(|field| row.get(&field.to_string()).cloned().unwrap_or_else(|| "".to_string()))
                 .collect();
 
             writer.write_record(&record)?;

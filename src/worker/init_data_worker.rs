@@ -7,12 +7,18 @@ use crate::types::AppState;
 
 #[derive(Clone)]
 pub struct InitDataWorker {
+    candidate_ids: Vec<i32>,
     vacancies_id: Vec<i32>,
+
     state: Arc<AppState>,
 }
 
 #[derive(Serialize, FromRow, Debug)]
 struct VacancyData {
+    candidate_id: i32,
+}
+#[derive(Serialize, FromRow, Debug)]
+struct VacanciesId {
     vacancy_can_id: i32,
 }
 
@@ -21,12 +27,26 @@ const SEESION_EXPORT: &str = " SET SESSION group_concat_max_len = 1000000;";
 impl InitDataWorker {
     pub fn new(state: Arc<AppState>) -> Self {
         Self {
+            candidate_ids: Vec::new(),
             vacancies_id: Vec::new(),
-            state: state,
+            state,
         }
     }
 
     pub fn chunk_list(&mut self) -> Vec<&[i32]> {
+        let mut chunk_vacancies = Vec::new();
+
+        // defautl offset
+        let offset = 200;
+
+        // dibagi per chunks menjadi 200 data
+        for chunk in self.candidate_ids.chunks(offset) {
+            chunk_vacancies.push(chunk);
+        }
+        chunk_vacancies
+    }
+
+    pub fn vacancies_chunk_list(&mut self) -> Vec<&[i32]> {
         let mut chunk_vacancies = Vec::new();
 
         // defautl offset
@@ -52,69 +72,29 @@ impl InitDataWorker {
         Ok(last_vacancy)
     }
 
-    pub async fn get_vacancy_can_ids(
-        &mut self,
-        last_vacancy_can_id: &u32,
-    ) -> Result<(), sqlx::Error> {
-        let sql_query = "select vacancy_can_id as vacancy_can_id from karirpad_v5.vacancy_apply_candidate where vacancy_can_id > ?";
+    pub async fn get_candidate_ids(&mut self, last_vacancy_can_id: &u32) -> Result<(), sqlx::Error> {
+        let sql_query = "select DISTINCT(candidate_id) as candidate_id from karirpad_v5.vacancy_apply_candidate where vacancy_can_id > ?";
         let vacancies = sqlx::query_as::<_, VacancyData>(sql_query)
             .bind(last_vacancy_can_id)
             .fetch_all(&self.state.db)
             .await?;
+        self.candidate_ids = vacancies.iter().map(|f| f.candidate_id).collect();
+        Ok(())
+    }
 
+    pub async fn get_vacancy_ids(&mut self, last_vacancy_can_id: &u32) -> Result<(), sqlx::Error> {
+        let sql_query = "select vacancy_can_id  from karirpad_v5.vacancy_apply_candidate where vacancy_can_id > ?";
+        let vacancies = sqlx::query_as::<_, VacanciesId>(sql_query)
+            .bind(last_vacancy_can_id)
+            .fetch_all(&self.state.db)
+            .await?;
         self.vacancies_id = vacancies.iter().map(|f| f.vacancy_can_id).collect();
-
         Ok(())
     }
 
-    pub async fn first_init_work_experience(&mut self) -> Result<(), sqlx::Error> {
+    pub async fn init_data_candidate(&mut self) -> Result<(), sqlx::Error> {
         let mut transaction = self.state.db.begin().await?;
-        for chunk in self.chunk_list() {
-            let query_sql = format!(
-                " UPDATE `_temp_taekwang_export` e
-                    JOIN (
-                        SELECT 
-                            cexp.candidate_id,
-                            GROUP_CONCAT(
-                                CONCAT_WS('|',
-                                    COALESCE(NULLIF(cexp.company_name, ''), ''),
-                                    COALESCE(NULLIF(cexp.position, ''), ''),
-                                    COALESCE(NULLIF(ci.industry_desc, ''), ''),
-                                    COALESCE(NULLIF(mjl.job_level_desc, ''), ''),
-                                    COALESCE(NULLIF(cexp.start_year, ''), ''),
-                                    COALESCE(NULLIF(cexp.end_year, ''), ''),
-                                    COALESCE(NULLIF(cexp.reason_for_leaving, ''), ''),
-                                    COALESCE(NULLIF(cexp.until_now, ''), '')
-                                ) ORDER BY cexp.start_year DESC SEPARATOR ';;'
-                            ) AS work_experience
-                        FROM karirpad_v5.candidate_exp cexp
-                        LEFT JOIN karirpad_v5.mika_m_industry ci ON CAST(ci.industry_code AS CHAR) = cexp.business_line
-                        LEFT JOIN karirpad_v5.m_job_level mjl ON mjl.job_level_id = cexp.job_level
-                       
-                        where cexp.candidate_id IN ({})
-                        GROUP BY cexp.candidate_id
-                    ) AS ed ON ed.candidate_id = e.candidate_id
-                    SET e.work_experience = ed.work_experience;",
-                chunk
-                    .iter()
-                    .map(|f| f.to_string())
-                    .collect::<Vec<String>>()
-                    .join(",")
-            );
-
-            let _execute_query = sqlx::query(&query_sql).execute(&mut *transaction).await?;
-        }
-
-        transaction.commit().await?;
-
-        Ok(())
-    }
-    pub async fn init_data_candidate(
-        &mut self,
-        last_vacancy_can_id: &u32,
-    ) -> Result<(), sqlx::Error> {
-        let mut transaction = self.state.db.begin().await?;
-        for chunk in self.chunk_list() {
+        for chunk in self.vacancies_chunk_list() {
             let query_sql = format!(
                 " INSERT INTO `_temp_taekwang_export`  (
                     candidate_id,
@@ -153,11 +133,7 @@ impl InitDataWorker {
                 LEFT JOIN karirpad_v5.t_vacancy v ON v.vacancy_id = vac.vacancy_id
                 WHERE vac.employer_id = 63402 and vac.vacancy_can_id in ({})
                 order by vac.vacancy_can_id asc",
-                chunk
-                    .iter()
-                    .map(|f| f.to_string())
-                    .collect::<Vec<String>>()
-                    .join(",")
+                chunk.iter().map(|f| f.to_string()).collect::<Vec<String>>().join(",")
             );
 
             let _execute_query = sqlx::query(&query_sql).execute(&mut *transaction).await?;
@@ -167,293 +143,20 @@ impl InitDataWorker {
 
         Ok(())
     }
-
-    pub async fn first_init_education_history(&mut self) -> Result<(), sqlx::Error> {
-        let mut transaction = self.state.db.begin().await?;
-
-        sqlx::query(&SEESION_EXPORT)
-            .execute(&mut *transaction)
-            .await?;
-        for chunk in self.chunk_list() {
-            let query_sql = format!(
-                "UPDATE `_temp_taekwang_export` e
-                            JOIN (
-                                SELECT
-                                    ce.candidate_id,
-                                    GROUP_CONCAT(
-                                        CONCAT_WS('|',
-                                            COALESCE(NULLIF(me.educ_desc_en, ''), ''),
-                                            COALESCE(NULLIF(ce.institution_name, ''), ''),
-                                            COALESCE(NULLIF(ce.major, ''), ''),
-                                            COALESCE(NULLIF(ce.start_year, ''), ''),
-                                            COALESCE(NULLIF(ce.end_year, ''), ''),
-                                            COALESCE(NULLIF(ce.gpa, ''), ''),
-                                            COALESCE(NULLIF(ce.until_now, ''), '')
-                                        ) ORDER BY ce.start_year DESC SEPARATOR ';;'
-                                    ) AS education_history
-                                FROM karirpad_v5.candidate_educ ce
-                                 LEFT JOIN karirpad_v5.m_education me ON me.educ_id = ce.educ_id
-                                where ce.candidate_id IN ({})
-                                GROUP BY ce.candidate_id
-                            ) AS ed ON ed.candidate_id = e.candidate_id
-                            SET e.education_history = ed.education_history;",
-                chunk
-                    .iter()
-                    .map(|f| f.to_string())
-                    .collect::<Vec<String>>()
-                    .join(",")
-            );
-
-            let _execute_query = sqlx::query(&query_sql).execute(&mut *transaction).await?;
-        }
-
-        transaction.commit().await?;
-
-        Ok(())
-    }
-
-    pub async fn first_init_language_skills(&mut self) -> Result<(), sqlx::Error> {
-        let mut transaction = self.state.db.begin().await?;
-
-        sqlx::query(&SEESION_EXPORT)
-            .execute(&mut *transaction)
-            .await?;
-        for chunk in self.chunk_list() {
-            let query_sql = format!(
-                "
-                        update `_temp_taekwang_export` e
-                        JOIN (
-                               SELECT
-                        kl.candidate_id,
-                        GROUP_CONCAT(
-                            CONCAT_WS('|',
-                                COALESCE(NULLIF(kl.language_desc, ''), ''),
-                                COALESCE(NULLIF(kl.language_test_type, ''), ''),
-                                COALESCE(NULLIF(kl.language_score, ''), ''),
-                                COALESCE(NULLIF(kl.language_start_date, null), null),
-                                COALESCE(NULLIF(kl.language_end_date, null), null)
-                            ) SEPARATOR ';;'
-                        ) AS language_skills
-                                            FROM (
-                            SELECT 
-                                cl.candidate_id,
-                                cl.language_id AS cl_language_id,
-                                l.language_desc,
-                                cl.language_test_type,
-                                cl.language_score,
-                                cl.language_start_date,
-                                cl.language_end_date
-                            FROM karirpad_v5.candidate_language cl
-                            LEFT JOIN karirpad_v5.m_language l 
-                                ON l.language_id = cl.language_id
-                             where cl.candidate_id IN ({})
-                            GROUP BY cl.candidate_id, cl.language_id
-                            ) kl group by kl.candidate_id
-                        ) AS lang ON lang.candidate_id = e.candidate_id
-                        SET e.language_skills = lang.language_skills;",
-                chunk
-                    .iter()
-                    .map(|f| f.to_string())
-                    .collect::<Vec<String>>()
-                    .join(",")
-            );
-
-            let _execute_query = sqlx::query(&query_sql).execute(&mut *transaction).await?;
-        }
-
-        transaction.commit().await?;
-
-        Ok(())
-    }
-
-    pub async fn first_init_tkg_family_info(&mut self) -> Result<(), sqlx::Error> {
-        let mut transaction = self.state.db.begin().await?;
-        sqlx::query(&SEESION_EXPORT)
-            .execute(&mut *transaction)
-            .await?;
-        for chunk in self.chunk_list() {
-            let query_sql = format!(
-                " 
-                     UPDATE `_temp_taekwang_export` e
-                JOIN (
-                    SELECT
-                        cfd.candidate_id,
-                        GROUP_CONCAT(
-                            CONCAT_WS('|',
-                                COALESCE(NULLIF(cfd.family_nik, ''), ''),
-                                COALESCE(NULLIF(cfd.name, ''), ''),
-                                COALESCE(NULLIF(rel.relationship_desc, ''), ''),
-                                COALESCE(NULLIF(cfd.dob, ''), ''),
-                                COALESCE(NULLIF(me.educ_desc_en, ''), ''),
-                                COALESCE(NULLIF(cfd.occupation, ''), '')
-                            )
-                            SEPARATOR ';;'
-                        ) AS family_info
-                    FROM karirpad_v5.candidate_family_detail cfd
-                    LEFT JOIN karirpad_v5.m_relationship rel ON cfd.relationship_id = rel.relationship_id
-                    LEFT JOIN karirpad_v5.m_education me ON cfd.educ_id = me.educ_id
-                    where cfd.candidate_id IN ({})
-                    GROUP BY cfd.candidate_id
-                ) fam ON fam.candidate_id = e.candidate_id
-                SET e.family_info = fam.family_info; ",
-                chunk
-                    .iter()
-                    .map(|f| f.to_string())
-                    .collect::<Vec<String>>()
-                    .join(",")
-            );
-
-            let _execute_query = sqlx::query(&query_sql).execute(&mut *transaction).await?;
-        }
-
-        transaction.commit().await?;
-
-        Ok(())
-    }
-
-    pub async fn first_init_tkg_emergency_contact(&mut self) -> Result<(), sqlx::Error> {
-        let mut transaction = self.state.db.begin().await?;
-        sqlx::query(&SEESION_EXPORT)
-            .execute(&mut *transaction)
-            .await?;
-        for chunk in self.chunk_list() {
-            let query_sql = format!(
-                " 
-                        UPDATE `_temp_taekwang_export` e
-                        JOIN (
-                            SELECT
-                                ec.candidate_id,
-                                GROUP_CONCAT(
-                                    CONCAT_WS('|',
-                                        COALESCE(NULLIF(ec.name, ''), ''),
-                                        COALESCE(NULLIF(rel.relationship_desc, ''), ''),
-                                        COALESCE(NULLIF(ec.phone_type, ''), ''),
-                                        COALESCE(NULLIF(ec.phone_number, ''), ''),
-                                        COALESCE(NULLIF(ec.is_living_together, ''))
-                                    ) SEPARATOR ';;'
-                                ) AS emergency_contacts
-                            from karirpad_v5.candidate_contact ec
-                             LEFT JOIN  karirpad_v5.m_relationship rel ON ec.relationship_id = rel.relationship_id
-                             LEFT JOIN karirpad_v5.vacancy_apply_candidate vac on vac.candidate_id = ec.candidate_id 
-                             where ec.candidate_id IN ({})
-                            group by ec.candidate_id
-                        ) ec_all ON ec_all.candidate_id = e.candidate_id
-                        SET e.emergency_contacts = ec_all.emergency_contacts;",
-                chunk
-                    .iter()
-                    .map(|f| f.to_string())
-                    .collect::<Vec<String>>()
-                    .join(",")
-            );
-
-            let _execute_query = sqlx::query(&query_sql).execute(&mut *transaction).await?;
-        }
-
-        transaction.commit().await?;
-
-        Ok(())
-    }
-
-    pub async fn first_init_tkg_driving_license(&mut self) -> Result<(), sqlx::Error> {
-        let mut transaction = self.state.db.begin().await?;
-        sqlx::query(&SEESION_EXPORT)
-            .execute(&mut *transaction)
-            .await?;
-        for chunk in self.chunk_list() {
-            let query_sql = format!(
-                "
-                        update `_temp_taekwang_export` tte 
-                        join(
-                            SELECT
-                                    ti.candidate_id,
-                                    CONCAT_WS('|',
-                                        COALESCE(ml.license_desc, ''),
-                                        COALESCE(ti.driving_license_number, '')
-                                    ) AS license_info
-                                FROM karirpad_v5.t_candidate_info ti
-                                LEFT JOIN karirpad_v5.m_license ml ON ml.license_id = ti.driving_license
-                                where ti.candidate_id IN ({})
-                                group by ti.candidate_id
-                        )as dv on dv.candidate_id =  tte.candidate_id
-                        SET tte.license_info = dv.license_info;",
-                chunk
-                    .iter()
-                    .map(|f| f.to_string())
-                    .collect::<Vec<String>>()
-                    .join(",")
-            );
-
-            let _execute_query = sqlx::query(&query_sql).execute(&mut *transaction).await?;
-        }
-
-        transaction.commit().await?;
-
-        Ok(())
-    }
-
-    pub async fn first_init_tkg_certificates(&mut self) -> Result<(), sqlx::Error> {
-        let mut transaction = self.state.db.begin().await?;
-        sqlx::query(&SEESION_EXPORT)
-            .execute(&mut *transaction)
-            .await?;
-        for chunk in self.chunk_list() {
-            let query_sql = format!(
-                "UPDATE `_temp_taekwang_export` e
-                        JOIN (
-                            SELECT
-                                cc.candidate_id,
-                                GROUP_CONCAT(
-                                    CONCAT_WS('|',
-                                        COALESCE(NULLIF(cc.certificate_number, ''), ''),
-                                        COALESCE(NULLIF(cc.topic, ''), ''),
-                                        COALESCE(NULLIF(cc.certificate_grade, ''), ''),
-                                        COALESCE(NULLIF(cc.organized_by, ''), ''),
-                                        COALESCE(NULLIF(cc.start_year, ''), ''),
-                                        COALESCE(NULLIF(cc.end_year, ''), '')
-                                    )
-                                    ORDER BY cc.start_year DESC
-                                    SEPARATOR ';;'
-                                ) AS certifications
-                            FROM karirpad_v5.candidate_course cc
-                            WHERE cc.candidate_id IN ({})
-                            GROUP BY cc.candidate_id
-                        ) certs ON certs.candidate_id = e.candidate_id
-                        SET e.certifications = certs.certifications;",
-                chunk
-                    .iter()
-                    .map(|f| f.to_string())
-                    .collect::<Vec<String>>()
-                    .join(",")
-            );
-
-            let _execute_query = sqlx::query(&query_sql).execute(&mut *transaction).await?;
-        }
-
-        transaction.commit().await?;
-
-        Ok(())
-    }
-
-    pub async fn first_init_data_reusable(
-        &mut self,
-        sql: &str,
-        label: &str,
-    ) -> Result<(), sqlx::Error> {
+    pub async fn first_init_data_reusable(&mut self, sql: &str, label: &str) -> Result<(), sqlx::Error> {
         println!("running  first init {}", label);
 
         let mut transaction = self.state.db.begin().await?;
-        sqlx::query(&SEESION_EXPORT)
-            .execute(&mut *transaction)
-            .await?;
+        sqlx::query(SEESION_EXPORT).execute(&mut *transaction).await?;
         for chunk in self.chunk_list() {
-            let fomratted_chunk = chunk
-                .iter()
-                .map(|f| f.to_string())
-                .collect::<Vec<String>>()
-                .join(",");
+            let fomratted_chunk = chunk.iter().map(|f| f.to_string()).collect::<Vec<String>>().join(",");
+
+            println!("formatted vacancies_id : {:?}", fomratted_chunk);
             let query_sql = sql.replace("{}", &fomratted_chunk);
 
-            let _execute_query = sqlx::query(&query_sql).execute(&mut *transaction).await?;
+            let execute_query = sqlx::query(&query_sql).execute(&mut *transaction).await?;
+
+            println!("{:?}", execute_query);
         }
 
         transaction.commit().await?;
@@ -465,10 +168,11 @@ impl InitDataWorker {
 
     pub async fn run_worker(&mut self) -> Result<(), sqlx::Error> {
         let last_id = self.get_last_id().await.unwrap().unwrap_or(0);
-        self.get_vacancy_can_ids(&last_id).await?;
+        self.get_candidate_ids(&last_id).await?;
+        self.get_vacancy_ids(&last_id).await?;
 
         println!("init data candidate");
-        self.init_data_candidate(&last_id).await?;
+        self.init_data_candidate().await?;
         println!("success init data candidate");
 
         let education_query = "UPDATE `_temp_taekwang_export` e
@@ -567,7 +271,7 @@ impl InitDataWorker {
                             group by ec.candidate_id
                         ) ec_all ON ec_all.candidate_id = e.candidate_id
                         SET e.emergency_contacts = ec_all.emergency_contacts;";
-        let certificates_query = "  update `_temp_taekwang_export` tte 
+        let certificates_query = "update `_temp_taekwang_export` tte 
                         join(
                             SELECT
                                     ti.candidate_id,
@@ -622,54 +326,21 @@ impl InitDataWorker {
                         FROM karirpad_v5.candidate_exp cexp
                         LEFT JOIN karirpad_v5.mika_m_industry ci ON CAST(ci.industry_code AS CHAR) = cexp.business_line
                         LEFT JOIN karirpad_v5.m_job_level mjl ON mjl.job_level_id = cexp.job_level
-                       
                         where cexp.candidate_id IN ({})
                         GROUP BY cexp.candidate_id
                     ) AS ed ON ed.candidate_id = e.candidate_id
                     SET e.work_experience = ed.work_experience;";
 
-        self.first_init_data_reusable(education_query, "Education")
-            .await?;
-        self.first_init_data_reusable(language_query, "Language")
-            .await?;
-        self.first_init_data_reusable(family_info, "Family Info")
-            .await?;
+        self.first_init_data_reusable(education_query, "Education").await?;
+        self.first_init_data_reusable(language_query, "Language").await?;
+        self.first_init_data_reusable(family_info, "Family Info").await?;
         self.first_init_data_reusable(emergency_contact_query, "Emergency Contact")
             .await?;
         self.first_init_data_reusable(certificates_query, "Certificates")
             .await?;
-        self.first_init_data_reusable(license_query, "License ")
-            .await?;
+        self.first_init_data_reusable(license_query, "License ").await?;
         self.first_init_data_reusable(work_experience_query, "Work Experience")
             .await?;
-
-        // println!("running  first init education");
-        // self.first_init_education_history().await?;
-        // println!("success first init education");
-
-        // println!("running  first language skilss");
-        // self.first_init_language_skills().await?;
-        // println!("success first language skills");
-
-        // println!("running  tkg certificates");
-
-        // self.first_init_tkg_certificates().await?;
-        // println!("success tkg  certificates");
-
-        // println!("running  tkg emergency contact");
-        // self.first_init_tkg_emergency_contact().await?;
-        // println!("success tkg  emergency contact");
-
-        // println!("running  tkg family info");
-        // self.first_init_tkg_family_info().await?;
-        // println!("success  tkg family info");
-        // println!("running  work experience");
-        // self.first_init_work_experience().await?;
-        // println!("success  work expereince");
-
-        // println!("running  work driving license");
-        // self.first_init_tkg_driving_license().await?;
-        // println!("success  work driving license");
 
         Ok(())
     }

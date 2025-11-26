@@ -84,7 +84,7 @@ pub fn formatted_data(records: HashMap<String, String>) -> HashMap<String, Strin
                     };
 
                     format_data.insert(field.to_string(), data.to_string());
-                } else if ["Candidate", "Fullname"].contains(&&field) {
+                } else if ["Candidate", "Fullname"].contains(field) {
                     let data = if let Some(value) = records.get("full_name") {
                         value
                     } else {
@@ -126,7 +126,7 @@ pub fn formatted_data(records: HashMap<String, String>) -> HashMap<String, Strin
                         vec!["-", "-"]
                     };
 
-                    let driving_license = license_data.get(0).unwrap_or(&"-");
+                    let driving_license = license_data.first().unwrap_or(&"-");
                     let driving_license_number = license_data.get(1).unwrap_or(&"-");
 
                     format_data
@@ -212,22 +212,19 @@ pub fn formatted_entries(
 
     // complexity 0(n^2)
     for i in 0..=4 {
-        match &templates.get(key_templates) {
-            Some(value) => {
-                for (index, template) in value.iter().enumerate() {
-                    let len_entries = entries.len();
-                    let increment = (i + 1).to_string();
+        if let Some(value) = &templates.get(key_templates) {
+            for (index, template) in value.iter().enumerate() {
+                let len_entries = entries.len();
+                let increment = (i + 1).to_string();
 
-                    let template_format = template.replace("{}", &increment);
-                    if index + 1 <= len_entries {
-                        let value = entries.get(i).copied().unwrap_or("-");
-                        formatted.insert(template_format, value.to_string());
-                    } else {
-                        formatted.insert(template_format, String::from("-"));
-                    }
+                let template_format = template.replace("{}", &increment);
+                if index < len_entries {
+                    let value = entries.get(i).copied().unwrap_or("-");
+                    formatted.insert(template_format, value.to_string());
+                } else {
+                    formatted.insert(template_format, String::from("-"));
                 }
             }
-            None => (),
         }
     }
 }

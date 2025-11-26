@@ -1,9 +1,9 @@
-use aws_config::imds::client;
 use aws_sdk_s3::primitives::ByteStream;
 use std::path::Path;
 
 use crate::core::s3_config::s3_config;
 
+#[allow(dead_code)]
 pub async fn upload_worker(ouput_file: &str) -> Result<(), aws_sdk_s3::Error> {
     let s3 = s3_config().await.expect("cannot upload in in s3");
 
@@ -12,16 +12,14 @@ pub async fn upload_worker(ouput_file: &str) -> Result<(), aws_sdk_s3::Error> {
 
     let body = ByteStream::from_path(Path::new("output.xlsx"))
         .await
-        .expect("cannot open file output xlsx");
+        .map_err(|e| println!("cannot open file output xlsx {}", e));
 
-    let resp = s3
-        .put_object()
+    s3.put_object()
         .bucket(bucket)
         .key(file_path)
-        .body(body)
+        .body(body.unwrap())
         .send()
         .await?;
 
-    println!("Upload berhasil: {:?}", resp.e_tag());
     Ok(())
 }

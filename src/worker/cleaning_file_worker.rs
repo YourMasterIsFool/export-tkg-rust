@@ -4,17 +4,15 @@ use anyhow::Result;
 
 pub fn cleaning_file(csv_path: &str, excel_path: &str) -> Result<()> {
     let path_csv = format!("csv/{}", csv_path);
-    let excel_path_file = format!("{}", "output.xlsx");
+    let _excel_path_file = "output.xlsx".to_string();
 
-    if !fs::remove_dir_all(path_csv).is_ok() {
+    if fs::remove_dir_all(path_csv).is_err() {
         println!("failed remove path");
-        panic!("failed remove file csv file path");
     }
 
-    if !fs::remove_file(excel_path).is_ok() {
-        println!("failed remove excel file");
-        panic!("failed remove excel file path");
-    }
+    // if fs::remove_file(excel_path).is_err() {
+    //     println!("failed remove excel file");
+    // }
 
     Ok(())
 }

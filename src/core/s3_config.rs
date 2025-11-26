@@ -12,8 +12,6 @@ pub async fn s3_config() -> Result<Client, aws_sdk_s3::Error> {
     let region = env::var("AWS_REGION").unwrap();
     let bucket = env::var("AWS_BUCKET_NAME").unwrap();
 
-    println!("{} {} {} {}", access_key, secret_key, region, bucket);
-
     let credential = Credentials::new(access_key, secret_key, None, None, "manual".into());
 
     let config = Config::builder()
@@ -22,7 +20,6 @@ pub async fn s3_config() -> Result<Client, aws_sdk_s3::Error> {
         .behavior_version_latest()
         .build();
 
-    println!("{:?}", config);
     let client = aws_sdk_s3::Client::from_conf(config);
 
     Ok(client)

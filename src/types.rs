@@ -95,7 +95,7 @@ pub struct EmailTemplate {
     pub logo_url: String,
     pub subject: String,
     pub body: String,
-    pub donwload_url: Option<String>,
+    pub download_url: Option<String>,
     pub client_email: String,
 }
 

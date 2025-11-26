@@ -107,6 +107,7 @@ async fn main() {
                 Message::InitChunk { id, total_chunk, total } => {
                     if let Some(j) = jobs.iter_mut().find(|j| j.id.as_ref() == Some(&id)) {
                         j.total_chunk = Some(total_chunk);
+                        j.total = total
                     }
                 }
 
@@ -131,23 +132,38 @@ async fn main() {
                         }
                         .to_string();
 
-                        let email_template = EmailTemplate {
-                            body: format!("export complete {} total data candidate : {}", title, j.total),
-                            subject: title,
-                            client_email: j.client_email.clone(),
-                            donwload_url: Some("http://download".to_string()),
-                            logo_url: "".to_string(),
+                        let file_name_upload = if j.is_candidate_pool {
+                            "candidate_pool"
+                        } else {
+                            "candidate_management"
                         };
-                        email_worker_clone.send_success(&email_template);
-                        match upload_worker("").await {
-                            Ok(()) => {
-                                println!("success")
+                        match upload_worker(file_name_upload).await {
+                            Ok(val) => {
+                                println!("successflly upload s3");
+                                let email_template = EmailTemplate {
+                                    body: format!("export complete {} total data candidate : {}", title, j.total),
+                                    subject: title,
+                                    client_email: j.client_email.clone(),
+                                    download_url: Some(val.clone()),
+                                    logo_url: "".to_string(),
+                                };
+
+                                match email_worker_clone.send_success(&email_template) {
+                                    Ok(()) => println!("Successfully uploaded email"),
+                                    Err(err) => {
+                                        println!("error upload email {}", err);
+                                    }
+                                }
+                                j.final_output = Some(val.clone());
                             }
                             Err(err) => {
                                 println!("error uploading : {}", err)
                             }
                         };
-                        cleaning_file(&id, "output.xlsx").map_err(|err| println!("error cleaning file {}", err));
+                        match cleaning_file(&id, "output.xlsx") {
+                            Ok(()) => println!("successfully cleaning file"),
+                            Err(err) => println!("failed cleaning file {}", err),
+                        };
                     }
                 }
 

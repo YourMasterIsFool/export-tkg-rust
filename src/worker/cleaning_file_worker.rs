@@ -10,9 +10,9 @@ pub fn cleaning_file(csv_path: &str, excel_path: &str) -> Result<()> {
         println!("failed remove path");
     }
 
-    // if fs::remove_file(excel_path).is_err() {
-    //     println!("failed remove excel file");
-    // }
+    if fs::remove_file(excel_path).is_err() {
+        println!("failed remove excel file");
+    }
 
     Ok(())
 }
